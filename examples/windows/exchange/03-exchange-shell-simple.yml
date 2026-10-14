@@ -1,0 +1,32 @@
+# Step 3: first Exchange Management Shell cmdlets.
+# Two variants that load the Exchange snap-in and run Exchange cmdlets:
+#   a) inline one-liner (good for quick tests)
+#   b) external .ps1 script (recommended - easier to read, debug and extend)
+#
+# Copy exchange-simple.ps1 to: C:\Program Files\New Relic\newrelic-infra\integrations.d\flexAssets\
+#
+# Notes:
+# - Loading the snap-in takes several seconds -> raise the 10s default timeout.
+# - Must run under Windows PowerShell 5.1 (shell: powershell), NOT pwsh 7.
+# - Query: FROM ExchangeServerSample, ExchangeDatabaseSimpleSample SELECT * SINCE 30 minutes ago
+---
+integrations:
+  - name: nri-flex
+    interval: 300s
+    timeout: 120s
+    config:
+      name: exchangeShellSimple
+      apis:
+        # a) inline
+        - event_type: ExchangeServerSample
+          shell: powershell
+          timeout: 90000
+          commands:
+            - run: 'Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn; Get-ExchangeServer -Identity $env:COMPUTERNAME | Select-Object @{n="serverName";e={$_.Name}}, @{n="edition";e={[string]$_.Edition}}, @{n="version";e={[string]$_.AdminDisplayVersion}}, @{n="serverRole";e={[string]$_.ServerRole}}, @{n="site";e={[string]$_.Site}} | ConvertTo-Json'
+
+        # b) script
+        - event_type: ExchangeDatabaseSimpleSample
+          shell: powershell
+          timeout: 90000
+          commands:
+            - run: '& "C:/Program Files/New Relic/newrelic-infra/integrations.d/flexAssets/exchange-simple.ps1"'

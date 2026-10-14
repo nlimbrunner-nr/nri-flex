@@ -1,0 +1,111 @@
+# Step 4: full Exchange monitoring via nr-exchange.ps1 -Check <name>.
+# Copy nr-exchange.ps1 to: C:\Program Files\New Relic\newrelic-infra\integrations.d\flexAssets\
+#
+# Checks are grouped into tiers by cost / rate of change. Each tier is its own nri-flex instance with
+# its own interval. APIs inside a tier run one after another, so keep integration timeout > sum of API timeouts.
+# Every check emits rows with "check", "server" and on failure "error":
+#   FROM ExchangeServiceHealthSample, ExchangeQueueSample, ... SELECT latest(error) WHERE error IS NOT NULL FACET server, check
+---
+integrations:
+  # ---------- Fast tier: things that page someone ----------
+  - name: nri-flex
+    interval: 60s
+    timeout: 170s
+    config:
+      name: exchangeFast
+      apis:
+        - event_type: ExchangeQueueSample
+          shell: powershell
+          timeout: 50000
+          commands:
+            - run: '& "C:/Program Files/New Relic/newrelic-infra/integrations.d/flexAssets/nr-exchange.ps1" -Check Queues'
+
+        - event_type: ExchangeDatabaseCopySample
+          shell: powershell
+          timeout: 50000
+          commands:
+            - run: '& "C:/Program Files/New Relic/newrelic-infra/integrations.d/flexAssets/nr-exchange.ps1" -Check DatabaseCopies'
+
+        # Plain Get-Counter, no Exchange shell -> cheap
+        - event_type: ExchangePerfSample
+          shell: powershell
+          timeout: 50000
+          commands:
+            - run: '& "C:/Program Files/New Relic/newrelic-infra/integrations.d/flexAssets/nr-exchange.ps1" -Check PerfCounters'
+
+  # ---------- Medium tier: health & state ----------
+  - name: nri-flex
+    interval: 300s
+    timeout: 290s
+    config:
+      name: exchangeMedium
+      apis:
+        - event_type: ExchangeServiceHealthSample
+          shell: powershell
+          timeout: 60000
+          commands:
+            - run: '& "C:/Program Files/New Relic/newrelic-infra/integrations.d/flexAssets/nr-exchange.ps1" -Check ServiceHealth'
+
+        - event_type: ExchangeDatabaseSample
+          shell: powershell
+          timeout: 60000
+          commands:
+            - run: '& "C:/Program Files/New Relic/newrelic-infra/integrations.d/flexAssets/nr-exchange.ps1" -Check Databases'
+
+        - event_type: ExchangeComponentStateSample
+          shell: powershell
+          timeout: 40000
+          commands:
+            - run: '& "C:/Program Files/New Relic/newrelic-infra/integrations.d/flexAssets/nr-exchange.ps1" -Check ComponentState'
+
+        - event_type: ExchangeReplicationSample
+          shell: powershell
+          timeout: 60000
+          commands:
+            - run: '& "C:/Program Files/New Relic/newrelic-infra/integrations.d/flexAssets/nr-exchange.ps1" -Check ReplicationHealth'
+
+        # LookbackMinutes must match the interval, otherwise counts overlap or have gaps
+        - event_type: ExchangeMessageTrackingSample
+          shell: powershell
+          timeout: 60000
+          commands:
+            - run: '& "C:/Program Files/New Relic/newrelic-infra/integrations.d/flexAssets/nr-exchange.ps1" -Check MessageTracking -LookbackMinutes 5'
+
+  # Get-HealthReport can take 30-90s alone -> own instance so it never delays the others
+  - name: nri-flex
+    interval: 300s
+    timeout: 200s
+    config:
+      name: exchangeHealthReport
+      apis:
+        - event_type: ExchangeHealthReportSample
+          shell: powershell
+          timeout: 180000
+          commands:
+            - run: '& "C:/Program Files/New Relic/newrelic-infra/integrations.d/flexAssets/nr-exchange.ps1" -Check HealthReport'
+
+  # ---------- Slow tier: inventory ----------
+  - name: nri-flex
+    interval: 3600s
+    timeout: 600s
+    config:
+      name: exchangeSlow
+      apis:
+        - event_type: ExchangeServerInfoSample
+          shell: powershell
+          timeout: 60000
+          commands:
+            - run: '& "C:/Program Files/New Relic/newrelic-infra/integrations.d/flexAssets/nr-exchange.ps1" -Check ServerInfo'
+
+        - event_type: ExchangeCertificateSample
+          shell: powershell
+          timeout: 60000
+          commands:
+            - run: '& "C:/Program Files/New Relic/newrelic-infra/integrations.d/flexAssets/nr-exchange.ps1" -Check Certificates'
+
+        # Enumerates all mailboxes - can take minutes on large databases
+        - event_type: ExchangeMailboxCountSample
+          shell: powershell
+          timeout: 480000
+          commands:
+            - run: '& "C:/Program Files/New Relic/newrelic-infra/integrations.d/flexAssets/nr-exchange.ps1" -Check MailboxCounts'

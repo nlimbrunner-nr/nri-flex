@@ -1,0 +1,17 @@
+# Step 2: Exchange service status - plain PowerShell, no Exchange Management Shell needed.
+# Replaces the typical CheckMK "services" check for MSExchange*.
+# Query:   FROM ExchangeServiceSample SELECT latest(status) FACET serviceName WHERE startType = 'Automatic'
+# Alert:   FROM ExchangeServiceSample SELECT count(*) WHERE startType = 'Automatic' AND status != 'Running' FACET hostname, serviceName
+---
+integrations:
+  - name: nri-flex
+    interval: 60s
+    config:
+      name: exchangeServices
+      apis:
+        - event_type: ExchangeServiceSample
+          shell: powershell
+          timeout: 30000
+          commands:
+            # Enums are cast to [string] - otherwise ConvertTo-Json emits numbers (4 instead of "Running").
+            - run: 'Get-Service -Name MSExchange*, W3SVC, IISADMIN, WinRM -ErrorAction SilentlyContinue | Select-Object @{n="serviceName";e={$_.Name}}, @{n="displayName";e={$_.DisplayName}}, @{n="status";e={[string]$_.Status}}, @{n="startType";e={[string]$_.StartType}}, @{n="isRunning";e={[int]($_.Status -eq "Running")}} | ConvertTo-Json'

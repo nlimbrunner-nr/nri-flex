@@ -1,0 +1,22 @@
+# Step 1: smoke tests - verify Flex runs on this Windows host at all.
+# Copy to: C:\Program Files\New Relic\newrelic-infra\integrations.d\
+# Query:   FROM FlexHelloCmdSample, FlexHelloPsSample SELECT * SINCE 10 minutes ago
+---
+integrations:
+  - name: nri-flex
+    interval: 60s
+    config:
+      name: flexHelloWorld
+      apis:
+        # Default shell on Windows is cmd.exe. Plain "key:value" text, split by Flex.
+        # (Avoid double quotes with cmd - they arrive escaped as \" and break JSON.)
+        - event_type: FlexHelloCmdSample
+          commands:
+            - run: echo message:hello_from_cmd
+              split_by: ":"
+
+        # PowerShell (Windows PowerShell 5.1). Build an object and emit it as JSON.
+        - event_type: FlexHelloPsSample
+          shell: powershell
+          commands:
+            - run: '[pscustomobject]@{ message = "hello from powershell"; psVersion = [string]$PSVersionTable.PSVersion; user = [Environment]::UserName; uptimeHours = [math]::Round(((Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime).TotalHours, 2) } | ConvertTo-Json'
