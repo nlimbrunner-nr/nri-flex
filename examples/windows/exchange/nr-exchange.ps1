@@ -165,7 +165,7 @@ $Checks = @{
                 mounted                       = [int][bool]$_.Mounted
                 mountedOnServer               = [string]$_.MountedOnServer
                 # On DAG members every copy is listed; use this to avoid double-counting sizes.
-                mountedOnThisServer           = [int]([string]$_.MountedOnServer -like "$Server*")
+                mountedOnThisServer           = [int]([string]$_.MountedOnServer -like "$Server.*")
                 databaseSizeBytes             = ConvertTo-Bytes $_.DatabaseSize
                 availableNewMailboxSpaceBytes = ConvertTo-Bytes $_.AvailableNewMailboxSpace
                 circularLoggingEnabled        = [int][bool]$_.CircularLoggingEnabled
@@ -189,7 +189,7 @@ $Checks = @{
     MailboxCounts = {
         Import-ExchangeShell
         Get-MailboxDatabase -Server $Server -Status |
-            Where-Object { [string]$_.MountedOnServer -like "$Server*" } |
+            Where-Object { [string]$_.MountedOnServer -like "$Server.*" } |
             ForEach-Object {
                 $db = $_.Name
                 New-Row @{

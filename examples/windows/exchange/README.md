@@ -2,7 +2,8 @@
 
 Step-by-step Flex configs for Exchange 2016 / 2019 / SE, from smoke test to full health coverage.
 Works on Windows Server 2016 / 2019 / 2022; nothing in the configs is OS-version specific. Note that
-Exchange 2016 is not supported on Server 2022 (needs Exchange 2019 CU12+ or SE).
+Exchange 2016 only supports Server 2012 R2 / 2016; Server 2019 needs Exchange 2019 or SE, and Server 2022
+needs Exchange 2019 CU12+ or SE.
 
 | Step | File | Needs Exchange shell | Event types |
 |---|---|---|---|
@@ -36,7 +37,7 @@ $cfg  = 'C:\Program Files\New Relic\newrelic-infra\integrations.d'
 Dry-run options:
 
 ```powershell
-# 1. One config, with each command and its raw output
+# 1. One config, with debug logging
 & $flex -config_path "$cfg\01-flex-hello-world.yml" -pretty -verbose
 
 # 2. All step configs, one after the other
@@ -46,7 +47,8 @@ Get-ChildItem "$cfg\0*-*.yml" | ForEach-Object {
 }
 
 # 3. Whole directory in one run (output from all configs is interleaved)
-& $flex -config_dir "$cfg\" -pretty
+# (no trailing backslash: "...\" would be passed as an escaped quote and break the path)
+& $flex -config_dir $cfg -pretty
 
 # 4. Script only, and check the output is valid JSON (an error here = broken JSON)
 & "$cfg\flexAssets\nr-exchange.ps1" -Check Queues | ConvertFrom-Json
@@ -57,7 +59,7 @@ What a dry run does and doesn't do:
 - **Nothing goes to New Relic.** Events print as JSON to stdout. Check the `"metrics": [...]` blocks for event types and attributes.
 - **Commands really run.** `Get-*`/`Test-*` are read-only, but `Test-ReplicationHealth` etc. still take real time.
 - **Agent-level keys are ignored.** You'll see `testing agent config, agent features will not be available`: the integration-level `interval`, `timeout` and `env` don't apply. Per-API `timeout` (ms) does. A timeout that only bites under the agent therefore shows up only in the agent log.
-- **`-verbose`** shows each command and its raw output. If JSON parsing breaks, look for `Write-Host` output or a banner in stdout.
+- **`-verbose`** enables debug logging (which commands run, failures). Raw command output is only shown when a command fails (`error_msg`); otherwise look at the emitted events. If JSON parsing breaks, look for `Write-Host` output, a banner, or stderr text.
 
 After deploying, confirm data arrives:
 
@@ -75,7 +77,7 @@ Problems show up in `C:\Program Files\New Relic\newrelic-infra\newrelic-infra.lo
 - **Timeouts.** Flex default is 10s per command; loading the snap-in alone takes 5-15s. Every API sets `timeout` (ms) and every integration sets `timeout` (s) above the sum of its APIs.
 - **JSON hygiene.** Only JSON may hit stdout. Enums are cast to `[string]`, booleans to `0/1` (easier alerting), sizes to bytes, dates to age in hours. Output is kept flat because Flex turns nested arrays into separate event types.
 - **"Works in Exchange Management Shell, no data via Flex."** The EMS shortcut loads the Exchange cmdlets for you; Flex starts a plain `powershell.exe` where `Get-Queue` etc. don't exist. The script must load them itself (`Import-ExchangeShell` in `nr-exchange.ps1`).
-- **Flex reads stdout, nothing else.** Don't push to the Event API or write to a file from the script, and don't use `Write-Host` (it lands in stdout and corrupts the JSON). Don't set `timestamp` yourself; the agent sets it.
+- **Flex parses stdout and stderr combined.** Anything the script writes to either stream ends up in the parsed output, so errors and warnings on stderr corrupt the JSON too. Don't push to the Event API or write to a file from the script, and don't use `Write-Host` (it lands in stdout and corrupts the JSON). Don't set `timestamp` yourself; the agent sets it.
 - **Valid config keys only.** Commands use `run:`. Keys like `command:`, `parse_json:`, `events:`, `attributes:` don't exist in Flex and are silently ignored.
 - **One row per object, not `queue1_*`, `queue2_*`.** Emit an array; each element becomes one event. Totals and "largest queue" are then NRQL (`sum(messageCount)`, `max(messageCount) FACET queueIdentity`).
 - **Don't filter in the script** (e.g. `MessageCount -ge $threshold`). No rows = no data, and you can't tell "healthy" from "broken". Emit everything, set thresholds in the alert condition.
@@ -154,5 +156,5 @@ Counter names from `Get-Counter` arrive lowercase; check exact spelling with
 ## Not covered by Flex - use built-ins
 
 - **CPU / memory / disk / network / Windows services**: the infrastructure agent collects these natively (`SystemSample`, `StorageSample`, ...). Windows services can also go through the `nri-winservices` integration.
-- **Event logs** (`MSExchange*` sources in Application log): forward with the agent's log forwarder (`logging.d`, `winevtlog`) rather than Flex.
+- **Event logs** (`MSExchange*` sources in Application log): forward with the agent's log forwarder (`logging.d`, `winevtlog`) rather than Flex. See the [Windows logging examples](https://github.com/newrelic/infrastructure-agent/tree/master/assets/examples/logging/windows).
 - **OWA / ECP / EWS / Autodiscover availability from the outside**: use New Relic Synthetics.

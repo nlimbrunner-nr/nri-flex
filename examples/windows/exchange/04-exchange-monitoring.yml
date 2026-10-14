@@ -87,7 +87,7 @@ integrations:
   # ---------- Slow tier: inventory ----------
   - name: nri-flex
     interval: 3600s
-    timeout: 600s
+    timeout: 630s
     config:
       name: exchangeSlow
       apis:
